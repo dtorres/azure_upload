@@ -43,15 +43,15 @@ module AzureUpload
     failed
   end
 
-  def self.bust_cache(paths, res_group_name = nil, profile_name = nil, endpoint_name = nil)
+  def self.bust_cache(paths, opts = {})
     config_file = DEFAULT_CONFIG_FILE
     configure(File.expand_path('~/' + config_file)) if @config.empty?
 
-    cdn = @config['CDN'] || {}
+    opts.merge!(@config['CDN'] || {})
     errors = []
-    res_group_name ||= cdn['resource_group'] || errors.push('Resource group not specified')
-    profile_name ||= cdn['profile'] || errors.push('Profile not specified')
-    endpoint_name ||= cdn['endpoint'] || errors.push('Endpoint not specified')
+    cdn['resource_group'] || errors.push('Resource group not specified')
+    cdn['profile'] || errors.push('Profile not specified')
+    cdn['endpoint'] || errors.push('Endpoint not specified')
 
     return_early = false
     unless errors.empty?
@@ -65,7 +65,7 @@ module AzureUpload
     return_early = ensure_required_config(@config) || return_early
     return if return_early
 
-    _bust_cache(paths, res_group_name, profile_name, endpoint_name)
+    _bust_cache(paths, opts)
   end
 
   def self._cdn_client
@@ -82,16 +82,17 @@ module AzureUpload
     cdn_client
   end
 
-  def self._bust_cache(paths, group, profile, endpoint)
-    cdn_client = _cdn_client
+  def self._bust_cache(paths, opts)
+    endpoints = _cdn_client.endpoints
     start = 0
     max_paths = 50
+    grp = opts['resource_group']
+    profile = opts['profile']
+    endp = opts['endpoint']
     while start < paths.count
-      sub_paths = paths[start, max_paths]
       params = Azure::ARM::CDN::Models::PurgeParameters.new
-      params.content_paths = sub_paths
-      endpoints = cdn_client.endpoints
-      promise = endpoints.begin_purge_content_async(group, profile, endpoint, params)
+      params.content_paths = paths[start, max_paths]
+      promise = endpoints.begin_purge_content_async(grp, profile, endp, params)
       @logger.info promise.value!.response.status
       start += max_paths
       if start < paths.count
