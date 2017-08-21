@@ -47,11 +47,11 @@ module AzureUpload
     config_file = DEFAULT_CONFIG_FILE
     configure(File.expand_path('~/' + config_file)) if @config.empty?
 
-    opts.merge!(@config['CDN'] || {})
+    opts = (@config['CDN'] || {}).merge(opts)
     errors = []
-    cdn['resource_group'] || errors.push('Resource group not specified')
-    cdn['profile'] || errors.push('Profile not specified')
-    cdn['endpoint'] || errors.push('Endpoint not specified')
+    opts['resource_group'] || errors.push('Resource group not specified')
+    opts['profile'] || errors.push('Profile not specified')
+    opts['endpoint'] || errors.push('Endpoint not specified')
 
     return_early = false
     unless errors.empty?
