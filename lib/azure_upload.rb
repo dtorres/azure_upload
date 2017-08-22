@@ -20,30 +20,47 @@ module AzureUpload
     uploader.updated_paths.compact.map { |x| container_dir + x.to_path }
   end
 
-  def self.configure(config_path)
-    file = File.open(config_path)
-    hash = YAML.safe_load(file)
-    @config.merge!(hash) if hash.is_a? Hash
-    @config.symbolize_keys!
+  def self.configure(config_path, overwrite = true)
+    hash =
+      if config_path.is_a? Hash
+        config_path.symbolize_keys
+      else
+        file = File.open(config_path)
+        YAML.safe_load(file).symbolize_keys
+      end
+    return unless hash.is_a? Hash
+    if overwrite
+      @config.merge!(hash)
+    else
+      @config = hash.merge!(@config)
+    end
   end
 
   def self.configure_if_needed
     config_file = DEFAULT_CONFIG_FILE
-    configure(File.expand_path('~/' + config_file)) if @config.empty?
+    configure(File.expand_path('~/' + config_file), false) if @config.empty?
   end
 
-  def self.ensure_required_config(config)
+  def self.ensure_required_config(_config)
+    keys = %i[client_id subscription_id private_key tenant_id]
+    msg = 'Provide the necessary keys by calling `configure`'
+    ensure_required_config_keys(keys, msg)
+  end
+
+  def self.ensure_required_config_keys(keys, msg, subpath = [], config = nil)
     failed = false
-    %w[client_id subscription_id private_key tenant_id].each do |key|
+    config ||= @config
+    keys.each do |key|
       next unless config[key.to_sym].nil?
       @logger.error "'#{key}' could not be found"
       failed = true
     end
     if failed
       config_file = DEFAULT_CONFIG_FILE
-      @logger.error 'Provide the necessary keys by calling `configure`'
-      text = "Alternatively they will be fetched from '#{config_file}'"
-      text += ' in your home directory'
+      @logger.error msg
+      text = "Alternatively they can be fetched from '#{config_file}'"
+      text += ' in your home directory.'
+      text += " Set a hash under the keypath '#{subpath.join('.')}'"
       @logger.error text
     end
     failed
@@ -51,23 +68,11 @@ module AzureUpload
 
   def self.bust_cache(paths, opts = {})
     configure_if_needed
-
+    keys = %i[resource_group profile endpoint]
     opts = opts.symbolize_keys
     opts = (@config[:CDN] || {}).symbolize_keys.merge(opts)
-    errors = []
-    opts[:resource_group] || errors.push('Resource group not specified')
-    opts[:profile] || errors.push('Profile not specified')
-    opts[:endpoint] || errors.push('Endpoint not specified')
-
-    return_early = false
-    unless errors.empty?
-      errors.each(&@logger.method(:error))
-      @logger.error 'Provide the necessary arguments in `bust_cache`'
-      error = "Alternatively they will be fetched from '#{config_file}'"
-      error += " in your home directory. Set a hash under the key 'CDN'"
-      @logger.error error
-      return_early = true
-    end
+    msg = 'Provide the necessary options in `bust_cache`'
+    return_early = ensure_required_config_keys(keys, msg, [:CDN], opts)
     return_early = ensure_required_config(@config) || return_early
     return if return_early
 
@@ -110,8 +115,12 @@ module AzureUpload
 
   def self.blobs
     configure_if_needed
-    account = @config[:storage_account] || ENV['AZURE_STORAGE_ACCOUNT']
-    access_key = @config[:storage_access_key] || ENV['AZURE_STORAGE_ACCESS_KEY']
+    configure({
+                storage_account: ENV['AZURE_STORAGE_ACCOUNT'],
+                storage_access_key: ENV['AZURE_STORAGE_ACCESS_KEY']
+              }, false)
+    account = @config[:storage_account]
+    access_key = @config[:storage_access_key]
     errors = []
     errors << 'Account name not found' unless account
     errors << 'Access key not found' unless access_key
