@@ -6,6 +6,7 @@ require 'azure/storage'
 require 'azure_mgmt_cdn'
 require 'pathname'
 require 'mime/types'
+require 'active_support/core_ext/hash'
 require 'yaml'
 require 'logger'
 
@@ -24,12 +25,13 @@ module AzureUpload
     file = File.open(config_path)
     hash = YAML.safe_load(file)
     @config.merge!(hash) if hash.is_a? Hash
+    @config.symbolize_keys!
   end
 
   def self.ensure_required_config(config)
     failed = false
     %w[client_id subscription_id private_key tenant_id].each do |key|
-      next unless config[key].nil?
+      next unless config[key.to_sym].nil?
       @logger.error "'#{key}' could not be found"
       failed = true
     end
@@ -47,11 +49,12 @@ module AzureUpload
     config_file = DEFAULT_CONFIG_FILE
     configure(File.expand_path('~/' + config_file)) if @config.empty?
 
-    opts = (@config['CDN'] || {}).merge(opts)
+    opts = opts.symbolize_keys
+    opts = (@config[:CDN] || {}).symbolize_keys.merge(opts)
     errors = []
-    opts['resource_group'] || errors.push('Resource group not specified')
-    opts['profile'] || errors.push('Profile not specified')
-    opts['endpoint'] || errors.push('Endpoint not specified')
+    opts[:resource_group] || errors.push('Resource group not specified')
+    opts[:profile] || errors.push('Profile not specified')
+    opts[:endpoint] || errors.push('Endpoint not specified')
 
     return_early = false
     unless errors.empty?
@@ -69,10 +72,10 @@ module AzureUpload
   end
 
   def self._cdn_client
-    client_id = @config['client_id']
-    sub_id = @config['subscription_id']
-    cdn_key = @config['private_key']
-    tenant_id = @config['tenant_id']
+    client_id = @config[:client_id]
+    sub_id = @config[:subscription_id]
+    cdn_key = @config[:private_key]
+    tenant_id = @config[:tenant_id]
 
     token_class = MsRestAzure::ApplicationTokenProvider
     provider = token_class.new(tenant_id, client_id, cdn_key)
@@ -86,9 +89,9 @@ module AzureUpload
     endpoints = _cdn_client.endpoints
     start = 0
     max_paths = 50
-    grp = opts['resource_group']
-    profile = opts['profile']
-    endp = opts['endpoint']
+    grp = opts[:resource_group]
+    profile = opts[:profile]
+    endp = opts[:endpoint]
     while start < paths.count
       params = Azure::ARM::CDN::Models::PurgeParameters.new
       params.content_paths = paths[start, max_paths]
