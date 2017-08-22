@@ -11,7 +11,6 @@ require 'yaml'
 require 'logger'
 
 module AzureUpload
-  MAX_PROCESS = 10
   DEFAULT_CONFIG_FILE = '.azure_upload.yml'.freeze
   @config = {}
   @logger = Logger.new(STDOUT)
@@ -26,6 +25,11 @@ module AzureUpload
     hash = YAML.safe_load(file)
     @config.merge!(hash) if hash.is_a? Hash
     @config.symbolize_keys!
+  end
+
+  def self.configure_if_needed
+    config_file = DEFAULT_CONFIG_FILE
+    configure(File.expand_path('~/' + config_file)) if @config.empty?
   end
 
   def self.ensure_required_config(config)
@@ -46,8 +50,7 @@ module AzureUpload
   end
 
   def self.bust_cache(paths, opts = {})
-    config_file = DEFAULT_CONFIG_FILE
-    configure(File.expand_path('~/' + config_file)) if @config.empty?
+    configure_if_needed
 
     opts = opts.symbolize_keys
     opts = (@config[:CDN] || {}).symbolize_keys.merge(opts)
@@ -71,20 +74,6 @@ module AzureUpload
     _bust_cache(paths, opts)
   end
 
-  def self._cdn_client
-    client_id = @config[:client_id]
-    sub_id = @config[:subscription_id]
-    cdn_key = @config[:private_key]
-    tenant_id = @config[:tenant_id]
-
-    token_class = MsRestAzure::ApplicationTokenProvider
-    provider = token_class.new(tenant_id, client_id, cdn_key)
-    credentials = MsRest::TokenCredentials.new(provider)
-    cdn_client = Azure::ARM::CDN::CdnManagementClient.new(credentials)
-    cdn_client.subscription_id = sub_id
-    cdn_client
-  end
-
   def self._bust_cache(paths, opts)
     endpoints = _cdn_client.endpoints
     start = 0
@@ -105,11 +94,43 @@ module AzureUpload
     end
   end
 
+  def self._cdn_client
+    client_id = @config[:client_id]
+    sub_id = @config[:subscription_id]
+    cdn_key = @config[:private_key]
+    tenant_id = @config[:tenant_id]
+
+    token_class = MsRestAzure::ApplicationTokenProvider
+    provider = token_class.new(tenant_id, client_id, cdn_key)
+    credentials = MsRest::TokenCredentials.new(provider)
+    cdn_client = Azure::ARM::CDN::CdnManagementClient.new(credentials)
+    cdn_client.subscription_id = sub_id
+    cdn_client
+  end
+
+  def self.blobs
+    configure_if_needed
+    account = @config[:storage_account] || ENV['AZURE_STORAGE_ACCOUNT']
+    access_key = @config[:storage_access_key] || ENV['AZURE_STORAGE_ACCESS_KEY']
+    errors = []
+    errors << 'Account name not found' unless account
+    errors << 'Access key not found' unless access_key
+    errors.each(&@logger.method(:error))
+    exit(1) unless errors.empty?
+    params = {
+      storage_account_name: account,
+      storage_access_key: access_key
+    }
+    client = Azure::Storage::Client.create(params)
+    client.blob_client
+  end
+
   class Uploader
+    MAX_PROCESS = 10
     attr_reader :updated_paths, :container_name
     attr_accessor :process_all
-    def initialize(blobs, container_name, dir_to_upload)
-      @blobs = blobs
+    def initialize(container_name, dir_to_upload, blobs = nil)
+      @blobs = blobs || AzureUpload.blobs
       @container_name = container_name
       @dir_to_upload = Pathname.new(dir_to_upload)
       @updated_paths = []
