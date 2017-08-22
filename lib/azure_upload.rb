@@ -38,13 +38,8 @@ module AzureUpload
 
   def self.configure_if_needed
     config_file = DEFAULT_CONFIG_FILE
-    configure(File.expand_path('~/' + config_file), false) if @config.empty?
-  end
-
-  def self.ensure_required_config(_config)
-    keys = %i[client_id subscription_id private_key tenant_id]
-    msg = 'Provide the necessary keys by calling `configure`'
-    ensure_required_config_keys(keys, msg)
+    path = File.expand_path('~/' + config_file)
+    configure(path, false) if @config.empty? && File.exist?(path)
   end
 
   def self.ensure_required_config_keys(keys, msg, subpath = [], config = nil)
@@ -73,7 +68,10 @@ module AzureUpload
     opts = (@config[:CDN] || {}).symbolize_keys.merge(opts)
     msg = 'Provide the necessary options in `bust_cache`'
     return_early = ensure_required_config_keys(keys, msg, [:CDN], opts)
-    return_early = ensure_required_config(@config) || return_early
+
+    keys = %i[client_id subscription_id private_key tenant_id]
+    msg = 'Provide the necessary keys by calling `configure`'
+    return_early = ensure_required_config_keys(keys, msg) || return_early
     return if return_early
 
     _bust_cache(paths, opts)
