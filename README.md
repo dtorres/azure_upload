@@ -33,13 +33,13 @@ You can provide the keys by:
 
 The library checks for these requirements and provides error messages on what is missing.
 
-###Uploader
+### Uploader
 - Storage Account (*storage_account*): name of the azure account you are uploading to.
 - Storage Access Key (*storage\_access\_key*): A private key to authenticate you.
 
 You can obtain those details following [this guide](https://docs.microsoft.com/en-us/azure/storage/common/storage-create-storage-account) by Microsoft.
 
-###CDN Purge
+### CDN Purge
 This API is older than the Uploader and for some reason requires way more parameters (and a bit obscure to get)
 
 - Client Identifier (*client_id*)
