@@ -11,7 +11,7 @@ It also implements a cache purge utility that can be easily invoked with `update
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'azure_upload'
+gem 'azure_upload', :git => "git@github.com:dtorres/azure_upload.git"
 ```
 
 And then execute:
