@@ -85,7 +85,7 @@ module AzureUpload
     profile = opts[:profile]
     endp = opts[:endpoint]
     while start < paths.count
-      params = Azure::ARM::CDN::Models::PurgeParameters.new
+      params = Azure::CDN::Profiles::Latest::Mgmt::Models::PurgeParameters.new
       params.content_paths = paths[start, max_paths]
       promise = endpoints.begin_purge_content_async(grp, profile, endp, params)
       @logger.info promise.value!.response.status
@@ -106,8 +106,7 @@ module AzureUpload
     token_class = MsRestAzure::ApplicationTokenProvider
     provider = token_class.new(tenant_id, client_id, cdn_key)
     credentials = MsRest::TokenCredentials.new(provider)
-    cdn_client = Azure::ARM::CDN::CdnManagementClient.new(credentials)
-    cdn_client.subscription_id = sub_id
+    cdn_client = Azure::CDN::Profiles::Latest::Mgmt::Client.new(credentials: credentials, subscription_id: sub_id)
     cdn_client
   end
 
